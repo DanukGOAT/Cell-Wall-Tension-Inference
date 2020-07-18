@@ -1,0 +1,83 @@
+%author: Danush Chelladurai, danush.chella@gmail.com
+%TC: truncation value
+%NN: discretization value
+%usables: indices of the samples the user wants to use
+%NP: Degree of prolynomial to fit the step function
+%This file computes the tension of the average cell configuration as a
+%stepfunction, then computes the polynomial with degree NP which best
+%approximates it
+function Figure_data_stablizing_strategy(usables, TC, NN, NP)
+load('Avg.mat')
+Hl = [];
+cl = [];
+Hr = [];
+cr = [];
+N = size(rv,2)-1;
+LUTpb = zeros(N,N+1);
+%Generative adjacency matrix
+for ii = 1:N
+    LUTpb(ii,ii) = 1; LUTpb(ii,ii+1) = -1;
+end
+
+for fileInd = usables
+    saveFileName=['ToAvg',num2str(TC),'TC',num2str(fileInd),'.mat'];
+    load(saveFileName);
+    for topBotInd = 1:2
+        if topBotInd ==1
+            rvpb0 =A3_truncate_1(:,1:NN:end);
+        else
+            rvpb0 =A3_truncate_2(:,1:NN:end);
+        end
+        
+        [ ks_inv0, kphi_inv0 ] = compute_curvatures(rvpb0,LUTpb);
+        %Computes Tension using curvature values
+        Tl_inv0 = 1./(2*kphi_inv0);
+        Tr_inv0 = Tl_inv0.*(2-ks_inv0./kphi_inv0);
+        
+        %approx the step function by polynomial
+        [ ~, ~,~,~,angle ] = compute_curvatures_perturb(rvpb0,LUTpb,0);
+        [Hlk,clk] = optmization_matrix_generation(rvpb0,angle,Tl_inv0, NP);
+        [Hrk,crk] = optmization_matrix_generation(rvpb0,angle,Tr_inv0, NP);
+        if size(Hl,1)==0
+            Hl =  Hlk;
+            cl =  clk;
+            Hr =  Hrk;
+            cr =  crk;
+        else
+            Hl = Hl + Hlk;
+            cl = cl + clk;
+            Hr = Hr + Hrk;
+            cr = cr + crk;
+        end
+    end
+    
+end
+
+
+%%
+aTl_inv1 = Hl\cl;
+aTr_inv1 = Hr\cr;
+
+%%
+x = rv(1,:);
+pTl_inv1 = zeros(size(x));
+pTr_inv1 = zeros(size(x));
+for i=1:length(x)
+    for k = 1:length(aTl_inv1)
+        pTl_inv1(i) = pTl_inv1(i)+aTl_inv1(k)*x(i).^(k-1);
+        pTr_inv1(i) = pTr_inv1(i)+aTr_inv1(k)*x(i).^(k-1);
+    end
+end
+
+
+figure
+hold on;
+plot(x+TC,pTl_inv1,'color','r','LineWidth',3);
+plot(x+TC,pTr_inv1,'color','b','LineWidth',3);
+
+
+xlabel('z-axis','FontSize',24);
+ylabel('Inferred Tensions','FontSize',24)
+set(gca,'FontSize',24)
+title('Tension Distribution','FontSize',20);
+hold on;
